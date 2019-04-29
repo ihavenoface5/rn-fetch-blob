@@ -2,6 +2,7 @@ package com.RNFetchBlob;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -36,8 +37,7 @@ import okhttp3.OkHttpClient;
 import static android.app.Activity.RESULT_OK;
 import static com.RNFetchBlob.RNFetchBlobConst.GET_CONTENT_INTENT;
 
-// Cookies
-
+@SuppressWarnings({"unused", "FieldCanBeLocal"})
 public class RNFetchBlob extends ReactContextBaseJavaModule {
     private String TAG = "RNFetchBlob";
     private final OkHttpClient mClient;
@@ -122,11 +122,12 @@ public class RNFetchBlob extends ReactContextBaseJavaModule {
                 intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                 // Validate that the device can open the file
-                PackageManager pm = getCurrentActivity().getPackageManager();
-                if (intent.resolveActivity(pm) != null) {
-                    this.getReactApplicationContext().startActivity(intent);
+                if (getCurrentActivity() != null) {
+                    PackageManager pm = getCurrentActivity().getPackageManager();
+                    if (intent.resolveActivity(pm) != null) {
+                        this.getReactApplicationContext().startActivity(intent);
+                    }
                 }
-
             } else {
                 Intent intent = new Intent(Intent.ACTION_VIEW)
                         .setDataAndType(Uri.parse("file://" + path), mime).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -372,7 +373,7 @@ public class RNFetchBlob extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void addCompleteDownload (ReadableMap config, Promise promise) {
-        DownloadManager dm = (DownloadManager) RCTContext.getSystemService(RCTContext.DOWNLOAD_SERVICE);
+        DownloadManager dm = (DownloadManager) RCTContext.getSystemService(Context.DOWNLOAD_SERVICE);
         if (config == null || !config.hasKey("path"))
         {
             promise.reject("EINVAL", "RNFetchblob.addCompleteDownload config or path missing.");
@@ -385,15 +386,17 @@ public class RNFetchBlob extends ReactContextBaseJavaModule {
         }
         try {
             WritableMap stat = RNFetchBlobFS.statFile(path);
-            dm.addCompletedDownload(
-                    config.hasKey("title") ? config.getString("title") : "",
-                    config.hasKey("description") ? config.getString("description") : "",
-                    true,
-                    config.hasKey("mime") ? config.getString("mime") : null,
-                    path,
-                    Long.valueOf(stat.getString("size")),
-                    config.hasKey("showNotification") && config.getBoolean("showNotification")
-            );
+            if (dm != null) {
+                dm.addCompletedDownload(
+                        config.hasKey("title") ? config.getString("title") : "",
+                        config.hasKey("description") ? config.getString("description") : "",
+                        true,
+                        config.hasKey("mime") ? config.getString("mime") : null,
+                        path,
+                        Long.valueOf(stat != null ? stat.getString("size") : null),
+                        config.hasKey("showNotification") && config.getBoolean("showNotification")
+                );
+            }
             promise.resolve(null);
         }
         catch(Exception ex) {
