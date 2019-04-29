@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.support.v4.content.FileProvider;
+import android.util.Log;
 import android.util.SparseArray;
 
 import com.facebook.react.bridge.ActivityEventListener;
@@ -38,7 +39,7 @@ import static android.app.Activity.RESULT_OK;
 import static com.RNFetchBlob.RNFetchBlobConst.GET_CONTENT_INTENT;
 
 public class RNFetchBlob extends ReactContextBaseJavaModule {
-
+    private String TAG = "RNFetchBlob";
     private final OkHttpClient mClient;
 
     static ReactApplicationContext RCTContext;
@@ -50,8 +51,8 @@ public class RNFetchBlob extends ReactContextBaseJavaModule {
     private static SparseArray<Promise> promiseTable = new SparseArray<>();
 
     public RNFetchBlob(ReactApplicationContext reactContext) {
-
         super(reactContext);
+        Log.i(TAG, "init");
 
         mClient = OkHttpClientProvider.getOkHttpClient();
         ForwardingCookieHandler mCookieHandler = new ForwardingCookieHandler(reactContext);

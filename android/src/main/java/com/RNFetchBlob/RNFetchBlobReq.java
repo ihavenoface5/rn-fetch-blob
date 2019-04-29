@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.util.Base64;
+import android.util.Log;
 
 import com.RNFetchBlob.Response.RNFetchBlobDefaultResp;
 import com.RNFetchBlob.Response.RNFetchBlobFileResp;
@@ -86,6 +87,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
         BASE64
     }
 
+    private String TAG = "RNFetchBlobReq";
     public static HashMap<String, Call> taskTable = new HashMap<>();
     public static HashMap<String, Long> androidDownloadManagerTaskTable = new HashMap<>();
     static HashMap<String, RNFetchBlobProgressConfig> progressReport = new HashMap<>();
@@ -113,6 +115,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
     OkHttpClient client;
 
     public RNFetchBlobReq(ReadableMap options, String taskId, String method, String url, ReadableMap headers, String body, ReadableArray arrayBody, OkHttpClient client, final Callback callback) {
+        Log.i(TAG, "new request");
         this.method = method.toUpperCase();
         this.options = new RNFetchBlobConfig(options);
         this.taskId = taskId;
