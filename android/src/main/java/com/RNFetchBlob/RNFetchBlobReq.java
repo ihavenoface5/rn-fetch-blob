@@ -112,7 +112,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
     OkHttpClient client;
 
     public RNFetchBlobReq(ReadableMap options, String taskId, String method, String url, ReadableMap headers, String body, ReadableArray arrayBody, OkHttpClient client, final Callback callback) {
-        Log.i(TAG, "new request");
+        Log.i(TAG, "new request taskId: " + taskId + " method: " + method + " URL: " + url);
         this.method = method.toUpperCase();
         this.options = new RNFetchBlobConfig(options);
         this.taskId = taskId;
