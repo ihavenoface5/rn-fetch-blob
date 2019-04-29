@@ -17,18 +17,12 @@ import com.RNFetchBlob.Response.RNFetchBlobFileResp;
 import com.facebook.common.logging.FLog;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
-import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-import javax.net.ssl.SSLContext;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -45,12 +39,15 @@ import java.nio.charset.CharsetEncoder;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.HashMap;
-
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import 	javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Call;
 import okhttp3.ConnectionPool;
@@ -65,7 +62,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okhttp3.TlsVersion;
 
-
+@SuppressWarnings("FieldCanBeLocal")
 public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
 
     enum RequestType  {
@@ -148,10 +145,13 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
         }
 
         if (androidDownloadManagerTaskTable.containsKey(taskId)) {
-            long downloadManagerIdForTaskId = androidDownloadManagerTaskTable.get(taskId).longValue();
+            long downloadManagerIdForTaskId = androidDownloadManagerTaskTable.get(taskId);
             Context appCtx = RNFetchBlob.RCTContext.getApplicationContext();
             DownloadManager dm = (DownloadManager) appCtx.getSystemService(Context.DOWNLOAD_SERVICE);
-            dm.remove(downloadManagerIdForTaskId);
+
+            if (dm != null) {
+                dm.remove(downloadManagerIdForTaskId);
+            }
         }
     }
 
@@ -192,13 +192,16 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                     req.addRequestHeader(key, headers.getString(key));
                 }
                 Context appCtx = RNFetchBlob.RCTContext.getApplicationContext();
+
                 DownloadManager dm = (DownloadManager) appCtx.getSystemService(Context.DOWNLOAD_SERVICE);
-                downloadManagerId = dm.enqueue(req);
-                androidDownloadManagerTaskTable.put(taskId, Long.valueOf(downloadManagerId));
-                appCtx.registerReceiver(this, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+
+                if (dm != null) {
+                    downloadManagerId = dm.enqueue(req);
+                    androidDownloadManagerTaskTable.put(taskId, downloadManagerId);
+                    appCtx.registerReceiver(this, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+                }
                 return;
             }
-
         }
 
         // find cached result if `key` property exists
@@ -339,7 +342,8 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
             final Request req = builder.build();
             clientBuilder.addNetworkInterceptor(new Interceptor() {
                 @Override
-                public Response intercept(Chain chain) throws IOException {
+                @NonNull
+                public Response intercept(@NonNull Chain chain) throws IOException {
                     redirects.add(chain.request().url().toString());
                     return chain.proceed(chain.request());
                 }
@@ -347,6 +351,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
             // Add request interceptor for upload progress event
             clientBuilder.addInterceptor(new Interceptor() {
                 @Override
+                @NonNull
                 public Response intercept(@NonNull Chain chain) throws IOException {
                     try {
                         Response originalResponse = chain.proceed(req);
@@ -384,7 +389,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                         timeout = true;
                         RNFetchBlobUtils.emitWarningEvent("RNFetchBlob error when sending request : " + e.getLocalizedMessage());
                     } catch(Exception ex) {
-
+                        // Something else went wrong
                     }
                     return chain.proceed(chain.request());
                 }
@@ -409,7 +414,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
             call.enqueue(new okhttp3.Callback() {
 
                 @Override
-                public void onFailure(@NonNull Call call, IOException e) {
+                public void onFailure(@NonNull Call call, @NonNull IOException e) {
                     cancelTask(taskId);
                     if(respInfo == null) {
                         respInfo = Arguments.createMap();
@@ -426,7 +431,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                 }
 
                 @Override
-                public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                public void onResponse(@NonNull Call call, @NonNull Response response) {
                     ReadableMap notifyConfig = options.addAndroidDownloads;
                     // Download manager settings
                     if(notifyConfig != null ) {
@@ -442,15 +447,15 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                             scannable = notifyConfig.getBoolean("mediaScannable");
                         if(notifyConfig.hasKey("notification"))
                             notification = notifyConfig.getBoolean("notification");
-                        DownloadManager dm = (DownloadManager)RNFetchBlob.RCTContext.getSystemService(RNFetchBlob.RCTContext.DOWNLOAD_SERVICE);
-                        dm.addCompletedDownload(title, desc, scannable, mime, destPath, contentLength, notification);
-                    }
+                        DownloadManager dm = (DownloadManager)RNFetchBlob.RCTContext.getSystemService(Context.DOWNLOAD_SERVICE);
 
+                        if (dm != null) {
+                            dm.addCompletedDownload(title, desc, scannable, mime, destPath, contentLength, notification);
+                        }
+                    }
                     done(response);
                 }
             });
-
-
         } catch (Exception error) {
             error.printStackTrace();
             releaseTaskResource();
@@ -462,14 +467,10 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
      * Remove cached information of the HTTP task
      */
     private void releaseTaskResource() {
-        if(taskTable.containsKey(taskId))
-            taskTable.remove(taskId);
-        if(androidDownloadManagerTaskTable.containsKey(taskId))
-            androidDownloadManagerTaskTable.remove(taskId);
-        if(uploadProgressReport.containsKey(taskId))
-            uploadProgressReport.remove(taskId);
-        if(progressReport.containsKey(taskId))
-            progressReport.remove(taskId);
+        taskTable.remove(taskId);
+        androidDownloadManagerTaskTable.remove(taskId);
+        uploadProgressReport.remove(taskId);
+        progressReport.remove(taskId);
         if(requestBody != null)
             requestBody.clearRequestBody();
     }
@@ -483,11 +484,15 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
         emitStateEvent(getResponseInfo(resp, isBlobResp));
         switch (responseType) {
             case KeepInMemory:
+                if (resp.body() == null) {
+                    return;
+                }
                 try {
                     // For XMLHttpRequest, automatic response data storing strategy, when response
                     // data is considered as binary data, write it to file system
                     if(isBlobResp && options.auto) {
                         String dest = RNFetchBlobFS.getTmpPath(taskId);
+
                         InputStream ins = resp.body().byteStream();
                         FileOutputStream os = new FileOutputStream(new File(dest));
                         int read;
@@ -534,6 +539,9 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                 }
                 break;
             case FileStorage:
+                if (resp.body() == null) {
+                    return;
+                }
                 try {
                     // In order to write response data to `destPath` we have to invoke this method.
                     // It uses customized response body which is able to report download progress
@@ -547,7 +555,7 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                 break;
             default:
                 try {
-                    callback.invoke(null, RNFetchBlobConst.RNFB_RESPONSE_UTF8, new String(resp.body().bytes(), "UTF-8"));
+                    callback.invoke(null, RNFetchBlobConst.RNFB_RESPONSE_UTF8, new String(resp.body().bytes(), Charset.forName("UTF-8")));
                 } catch (IOException e) {
                     callback.invoke("RNFetchBlob failed to encode response data to UTF8 string.", null);
                 }
@@ -624,8 +632,8 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
     private boolean isBlobResponse(Response resp) {
         Headers h = resp.headers();
         String ctype = getHeaderIgnoreCases(h, "Content-Type");
-        boolean isText = !ctype.equalsIgnoreCase("text/");
-        boolean isJSON = !ctype.equalsIgnoreCase("application/json");
+        boolean isText = ctype.equalsIgnoreCase("text/");
+        boolean isJSON = ctype.equalsIgnoreCase("application/json");
         boolean isCustomBinary = false;
         if(options.binaryContentTypes != null) {
             for(int i = 0; i< options.binaryContentTypes.size();i++) {
@@ -661,6 +669,11 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
         String action = intent.getAction();
         if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(action)) {
             Context appCtx = RNFetchBlob.RCTContext.getApplicationContext();
+
+            if (intent.getExtras() == null) {
+                return;
+            }
+
             long id = intent.getExtras().getLong(DownloadManager.EXTRA_DOWNLOAD_ID);
             if (id == this.downloadManagerId) {
                 releaseTaskResource(); // remove task ID from task map
@@ -668,9 +681,12 @@ public class RNFetchBlobReq extends BroadcastReceiver implements Runnable {
                 DownloadManager.Query query = new DownloadManager.Query();
                 query.setFilterById(downloadManagerId);
                 DownloadManager dm = (DownloadManager) appCtx.getSystemService(Context.DOWNLOAD_SERVICE);
+                if (dm == null) {
+                    return;
+                }
+
                 dm.query(query);
                 Cursor c = dm.query(query);
-
 
                 String filePath = null;
                 // the file exists in media content database
